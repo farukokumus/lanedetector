@@ -37,7 +37,7 @@ def processGray(noisereduc_image):
 
 ## CANNY EDGE DETECTION ##
 def processEdge(gray_image,plot=True):
-    edge_image = cv2.Canny(gray_image, 100, 200)
+    edge_image = cv2.Canny(gray_image, 150, 200)
     if plot==True:
         cv2.imshow("After edge detection",edge_image)
     return edge_image
@@ -50,36 +50,26 @@ def binaryProcess(thresholdS_image, thresholdR_image,edge_image,plot=False):
         cv2.imshow("Frame after preprocessing",preprocess_image)
     return preprocess_image    
 
-## DEFINE ROI AND CROP THE IMAGE ##
-def processRoi(edge_image,offset=20,point_offset=60,y_offset=100,plot=False):
-    height = edge_image.shape[0]
-    width = edge_image.shape[1]
-
-    yf=height/2+y_offset
-    xcenter=width/2
-
-    vertices = (offset,height), (xcenter-point_offset, yf), (xcenter+point_offset,yf), (width-offset,height) # vertices first width after height
-    vertices = np.array([vertices],np.int32)
-    mask = np.zeros_like(edge_image)
-    mask=cv2.fillPoly(mask,vertices,255)
-    roi_image = cv2.bitwise_and(edge_image,mask)
-    if plot == True:
-        cv2.imshow("Frame After preprocessing and ROI", roi_image)
-    return roi_image
-
-## CAlCULATE TRANFORMATION MATRICES ## 
-def calcTM(preprocess_image,offset=20,point_offset=60,y_offset=100):
+## DEFINE ROI AND CROP THE IMAGE CAlCULATE TRANFORMATION MATRICES ## 
+def calcTM(preprocess_image,offset=120,point_offset=120,y_offset=100,toright=20,height_crop=50,plot=False):
 
     height = preprocess_image.shape[0]
     width = preprocess_image.shape[1]
-    yf=height/2+y_offset
+    yf=(height/2)+y_offset
     xcenter=width/2
 
-    roi = np.float32([(offset,height), (xcenter-point_offset, yf), (xcenter+point_offset,yf), (width-offset,height)])
+    vertices = (offset+toright,height-height_crop), (xcenter-point_offset, yf), (xcenter+point_offset,yf), (width-offset+toright,height-height_crop) # vertices first width after height
+    vertices = np.array([vertices],np.int32)
+    roi = np.float32([(offset+toright,height-height_crop), (xcenter-point_offset, yf), (xcenter+point_offset,yf), (width-offset+toright,height-height_crop)])
     desired= np.float32([(offset,width),(offset,0),(height-offset, 0),(height-offset,width)])
     M = cv2.getPerspectiveTransform(roi, desired)
     Minv = cv2.getPerspectiveTransform(desired,roi)
-    return roi,desired,M,Minv
+    mask = np.zeros_like(preprocess_image)
+    mask=cv2.fillPoly(mask,vertices,255)
+    roi_image = cv2.bitwise_and(preprocess_image,mask)
+    if plot == True:
+        cv2.imshow("Frame After preprocessing and ROI", roi_image)
+    return roi_image,roi,desired,M,Minv
 
 ## DO PERSPECTIVE TRANSFORMATION ##    
 def perspectiveTransform(preprocess_image,M,plot=False):
@@ -294,10 +284,12 @@ def calculate_car_position(orig_frame,left_fit,right_fit,XM_PER_PIX = 3.7 / 781)
     return center_offset
 
 
-def debugConsole(frame,warp_image,frame_sliding,result,final_image,left_curve,right_curve,center_offset,left_fitx,right_fitx,ploty,width,height,debugON=False):
+def debugConsole(frame,preprocess_image,roi_image,warp_image,frame_sliding,result,final_image,left_curve,right_curve,center_offset,left_fitx,right_fitx,ploty,width,height,debugON=False):
 
     if debugON==True:
         cv2.imshow("Original Image",frame)
+        cv2.imshow("After process Image(Threshold and Canny)",preprocess_image)
+        cv2.imshow("ROI Image",roi_image)
         cv2.imshow("Image after Perspective Transformation",warp_image)
         cv2.putText(final_image,'Curve Radius: '+str((left_curve+right_curve)/2)[:7]+' m', (int((5/600)*width), int((20/338)*height)), cv2.FONT_HERSHEY_SIMPLEX, (float((0.5/600)*width)),(255,255,255),2,cv2.LINE_AA)
         cv2.putText(final_image,'Center Offset: '+str(center_offset)[:7]+' cm', (int((5/600)*width), int((40/338)*height)), cv2.FONT_HERSHEY_SIMPLEX, (float((0.5/600)*width)),(255,255,255),2,cv2.LINE_AA)
@@ -314,7 +306,7 @@ def debugConsole(frame,warp_image,frame_sliding,result,final_image,left_curve,ri
 
 ## MAIN CODE ## 
 if __name__ == "__main__":
-    cap = cv2.VideoCapture("C:/Users/fzlfrkkms/Desktop/SEMINAR/LaneDetectionVideos/videos/3.mp4")
+    cap = cv2.VideoCapture("C:/Users/fzlfrkkms/Desktop/SEMINAR/lanedetector/LaneDetectionVideos/videos/3.mp4")
     while cap.isOpened():
         ret,frame=cap.read()
         if ret==True:
@@ -324,14 +316,13 @@ if __name__ == "__main__":
             thresholdL_image=threshold(HLS_image[:, :, 1],plot=False)
             edge_image=processEdge(thresholdL_image,plot=False)
             edge_image=processGauss(edge_image)
-            thresholdS_image=threshold(HLS_image[:, :, 2],thresh=(80,255))
+            thresholdS_image=threshold(HLS_image[:, :, 2],thresh=(128,255))
             thresholdR_image=threshold(frame[:, :, 2],plot=False)
             preprocess_image=binaryProcess(thresholdS_image, thresholdR_image,edge_image, plot=False)
-            roi_image=processRoi(preprocess_image,plot=False)
             
             ## PERSPECTIVE TRANSFORM ## 
-            roi,desired,M,Minv=calcTM(preprocess_image,offset=200)
-            warp_image=perspectiveTransform(preprocess_image,M,plot=False)
+            roi_image,roi,desired,M,Minv=calcTM(preprocess_image,offset=180,point_offset=60,y_offset=90,toright=90,height_crop=55,plot=False)
+            warp_image=perspectiveTransform(roi_image,M,plot=False)
 
             ## HISTOGRAM OF THE IMAGE ##
             histogram,peak_left,peak_right=lane_histogram(warp_image, height_start=800, height_end=1250,plot=False)
@@ -347,10 +338,10 @@ if __name__ == "__main__":
             center_offset=calculate_car_position(frame,left_poly,right_poly,XM_PER_PIX = 3.7 / 781)
             
             ## DEBUG CONSOLE ## 
-            debugConsole(frame,warp_image,frame_sliding,result,final_image,left_curve,right_curve,center_offset,left_fitx,right_fitx,ploty,width=frame.shape[1],height=frame.shape[0],debugON=True)
+            debugConsole(frame,preprocess_image,roi_image,warp_image,frame_sliding,result,final_image,left_curve,right_curve,center_offset,left_fitx,right_fitx,ploty,width=frame.shape[1],height=frame.shape[0],debugON=True)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
     cap.release()
     cv2.destroyAllWindows()     
-        
+         

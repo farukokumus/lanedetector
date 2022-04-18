@@ -4,7 +4,7 @@ import cv2
 def canny_webcam():
     "Live capture frames from webcam and show the canny edge image of the captured frames."
 
-    cap = cv2.VideoCapture("C:/Users/fzlfrkkms/Desktop/SEMINAR/LaneDetectionVideos/videos/cut.mp4")
+    cap = cv2.VideoCapture("C:/Users/fzlfrkkms/Desktop/SEMINAR/lanedetector/LaneDetectionVideos/videos/cut.mp4")
 
     while True:
         ret, frame = cap.read()
